@@ -34,13 +34,13 @@ sha256sum "$FPK"
 
 致谢：[MoviCloud](https://github.com/MoviCloud-com/movicloud-app) / [PanSou](https://github.com/fish2018/pansou)。
 
-## 本次 fnOS 本地构建记录（待安装验证）
+## 本次 fnOS 本地构建与功能验收记录
 
 - 目标版本：`v1.0.6-pansou.1`（发行命名建议，并非已发布 Tag）
 - FPK 文件：`movicloud-pansou.fpk`
 - `fnpack build` 输出：`Packing successfully`
 - SHA-256：`70cb447febd48f3bbb64629314ae24f55dd18cd95746476d2f9d9d27b2c6063c`
 - 来源：用户在 fnOS NAS 上执行编译和打包后提供的终端输出；助手尚未取得该二进制做独立校验
-- 状态：**本地构建完成；新版安装、实际搜索与转存回归测试待做；GitHub Release 尚未创建**
+- 状态：**本地构建完成；用户确认 8/8 项安装与功能回归测试通过；GitHub Release 尚未创建**
 
-安装测试之前建议另存当前正常运行版本的 FPK；如果安装工具是覆盖升级，应先备份应用数据并确认是否支持回滚。待升级测试通过后，再核对安装包 SHA-256 与本记录相同。
+安装/升级、15079 端口、初始化或数据加载、电影搜索、电视剧搜索、夸克转存、UC 转存和重启后的功能测试均已通过（用户实测反馈）。上线前仍建议对准备上传的 FPK 附件重新计算 SHA-256，确认与本记录一致。此测试结果不等于跨设备或安全审计通过。
