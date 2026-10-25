@@ -30,7 +30,9 @@ grep -q "$port_script" "$fpk/app/ui/config" || { echo "Port mismatch in app/ui/c
 
 timestamp="$(date +%Y%m%d-%H%M%S)"
 if [[ -d "$fpk/app/runtime/fnOS" ]]; then
-  mv "$fpk/app/runtime/fnOS" "$fpk/app/runtime/fnOS.backup-$timestamp"
+  backup_dir="$(dirname "$fpk")/.fnos-build-backups"
+  mkdir -p "$backup_dir"
+  mv "$fpk/app/runtime/fnOS" "$backup_dir/fnOS-$timestamp"
 fi
 mkdir -p "$fpk/app/runtime"
 cp -a "$src/dist/fnOS" "$fpk/app/runtime/fnOS"
