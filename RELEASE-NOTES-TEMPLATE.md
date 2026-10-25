@@ -1,20 +1,43 @@
-# v1.0.6-pansou.1（草稿）
+# MoviCloud × PanSou v1.0.6-pansou.1 — fnOS 私有测试版
+
+> 本文是 GitHub Release 说明草稿。当前仓库仍为 Private；尚未通过本连接创建 Release 或上传二进制安装包。公开分发前须核对上游许可证与授权。
 
 ## 主要变化
-- MoviCloud v1.0.6 影视资源搜索改用自建 PanSou
-- 保留 MoviCloud 原有个人网盘管理及夸克/UC 分享转存流程
-- fnOS x86_64 FPK 测试版
 
-## 安装
-1. 按 `docs/INSTALL.md` 部署 PanSou
-2. 确认 FPK 的 PanSou API 地址和端口
-3. 备份已有应用数据后再安装
+- 基于 MoviCloud v1.0.6，影视资源搜索接入自建 PanSou。
+- 保留 MoviCloud 原有个人网盘管理流程与夸克、UC 转存功能。
+- API 客户端版本标识已与官方 v1.0.6 对齐。
+- 适用于本次验证过的 fnOS x86_64 环境；不代表已覆盖其他系统或架构。
 
-## 验证范围与限制
-- 已验证单台 fnOS x86_64 上搜索和夸克转存
-- 其他设备兼容性、其他网盘转存未全面验证
+## 本次实际验收（用户于 fnOS 上反馈通过）
 
-## 致谢
-[MoviCloud](https://github.com/MoviCloud-com/movicloud-app) 与 [PanSou](https://github.com/fish2018/pansou) 的作者和贡献者。
+1. FPK 安装或升级成功。
+2. 应用可以启动，端口 `15079` 可访问。
+3. 首次初始化或已有数据加载正常。
+4. 电影资源搜索正常。
+5. 电视剧资源搜索正常。
+6. 夸克网盘转存正常。
+7. UC 网盘转存正常。
+8. 重启应用后仍正常使用。
 
-> 当前仅为草稿。取得必要再分发授权、完成安全检查并上传真正的 FPK 后才能发布 Release。
+以上 8 项均为**实际操作反馈**，不是自动化测试证明；卸载后恢复、跨设备兼容性、其他云盘转存、长期稳定性尚未充分验证。
+
+## 安装与运行前提
+
+- fnOS NAS，并具备运行本版 Node 服务的环境（当前为 x86_64 构建）。
+- 可访问的 PanSou 服务。当前验证配置使用 NAS 宿主机 `http://127.0.0.1:8088`。
+- FPK Web 入口端口为 `15079`。若在其他服务器运行 PanSou，须先调整 FPK 的 `PANSOU_API_URL`，不能直接假定容器与宿主机网络相同。
+- 升级前备份已安装版本及持久化数据；请参照 [安装与使用](docs/INSTALL.md)。
+
+## 安装包信息
+
+- 文件名：`movicloud-pansou.fpk`
+- SHA-256：`70cb447febd48f3bbb64629314ae24f55dd18cd95746476d2f9d9d27b2c6063c`
+- 校验值来源：用户在 fnOS 上执行打包后提供的 `sha256sum` 输出；上传 GitHub 后应对实际附件再次核对。
+- GitHub Release 附件：**尚未上传**。
+
+## 项目与致谢
+
+本项目整合 [MoviCloud](https://github.com/MoviCloud-com/movicloud-app) 与 [PanSou](https://github.com/fish2018/pansou) 的能力。感谢两项目作者及贡献者。
+
+本融合版本非原项目官方发行版。请遵守原项目许可及相关内容服务条款；勿将来历不明的网盘资源用于侵权用途。
