@@ -16,6 +16,12 @@ const api = useCloudFileManagement()
 const accounts = computed(() => props.accounts.filter(x => x.isValid && !!x.cookie))
 const accountIndex = ref(0)
 const files = ref<any[]>([])
+const allVideoFiles = ref<any[]>([])
+const scanning = ref(false)
+const scanProgress = ref(0)
+const scanError = ref('')
+const videoExtensions = /\.(mkv|mp4|m4v|avi|mov|wmv|ts|m2ts|mpg|mpeg|webm|iso|flv|rmvb|vob)$/i
+const isVideoFile = (f: any) => !isFolder(f) && videoExtensions.test(filename(f))
 const error = ref('')
 const busy = ref(false)
 const ready = ref(false)
@@ -74,6 +80,10 @@ watch(() => props.visible, v => {
   if (v) {
     accountIndex.value = 0
     files.value = []
+    allVideoFiles.value = []
+    scanProgress.value = 0
+    scanError.value = ''
+    scanning.value = false
     ready.value = false
     error.value = ''
     busy.value = false
@@ -125,6 +135,52 @@ const inspect = async () => {
     if (generationAtStart === generation && !ready.value) busy.value = false
   }
 }
+const scanAllVideoFiles = async () => {
+  const a = accounts.value[accountIndex.value]
+  if (!a || !pwdID.value || !stoken.value || scanning.value) return
+  const generationAtStart = generation
+  scanning.value = true
+  scanProgress.value = 0
+  scanError.value = ''
+  allVideoFiles.value = []
+  const found: any[] = []
+  const queue: { id: string; path: string; depth: number }[] = [{ id: '0', path: '', depth: 0 }]
+  const seenFolders = new Set<string>(['0'])
+  try {
+    while (queue.length && found.length < 2000 && seenFolders.size < 500) {
+      const folder = queue.shift()!
+      const result = await api.getShareList(asAccount(a), pwdID.value, stoken.value, folder.id, 1, 100)
+      if (generationAtStart !== generation) return
+      if (!result.success) throw new Error(result.message || '读取子目录失败')
+      const list = Array.isArray(result.data?.list) ? result.data.list : []
+      for (const file of list) {
+        const name = filename(file)
+        const path = folder.path ? folder.path + '/' + name : name
+        if (isFolder(file)) {
+          const id = String(file.fid || '')
+          if (id && !seenFolders.has(id) && folder.depth < 12) {
+            seenFolders.add(id)
+            queue.push({ id, path, depth: folder.depth + 1 })
+          }
+        } else if (isVideoFile(file)) {
+          found.push({ ...file, __fullPath: path })
+        }
+      }
+      scanProgress.value = seenFolders.size
+    }
+    allVideoFiles.value = found
+    if (queue.length) scanError.value = '已达到扫描安全上限，结果可能不完整。'
+    if (!found.length) scanError.value = '未找到带常见视频扩展名的文件；可能是目录权限、分页或文件扩展名导致。'
+  } catch (e: any) {
+    if (generationAtStart === generation) scanError.value = e?.message || '扫描分享目录失败'
+  } finally {
+    if (generationAtStart === generation) scanning.value = false
+  }
+}
+const chooseVideoFile = (file: any) => {
+  applyFileMetadata(file)
+  close()
+}
 const openFolder = async (file: any) => {
   if (!isFolder(file) || !file.fid || busy.value) return
   await loadFolder(String(file.fid), [...folderTrail.value, { id: String(file.fid), name: filename(file) }])
@@ -150,6 +206,25 @@ const back = async () => {
           :disabled="busy" @click="inspect">{{ busy ? '正在读取…' : '读取真实文件列表' }}</button>
       </div>
       <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
+      <div v-if="ready" class="space-y-2">
+        <button type="button" class="rounded border px-3 py-2 text-sm disabled:opacity-50"
+          :disabled="busy || scanning" @click="scanAllVideoFiles">
+          {{ scanning ? '正在递归扫描子目录…' : '扫描全部子目录中的视频文件' }}
+        </button>
+        <span v-if="scanning" class="text-xs text-gray-500">已检查 {{ scanProgress }} 个目录</span>
+        <p v-if="scanError" class="text-xs text-amber-600">{{ scanError }}</p>
+        <div v-if="allVideoFiles.length" class="max-h-64 overflow-auto rounded border">
+          <div v-for="file in allVideoFiles" :key="String(file.fid || file.__fullPath)"
+            class="flex items-center gap-2 border-b p-2">
+            <div class="min-w-0 flex-1">
+              <div class="truncate text-sm" :title="file.__fullPath">{{ file.__fullPath }}</div>
+              <div class="text-xs text-gray-500">{{ sizeText(file) }}</div>
+            </div>
+            <button type="button" class="shrink-0 rounded bg-blue-600 px-2 py-1 text-xs text-white"
+              @click="chooseVideoFile(file)">使用此文件</button>
+          </div>
+        </div>
+      </div>
       <div v-if="ready">
         <div class="flex items-center gap-2 text-sm">
           <button v-if="folderTrail.length > 1" type="button" class="text-blue-600" :disabled="busy" @click="back">返回上级</button>
