@@ -1486,25 +1486,25 @@ watch(() => mediaImages.value, () => {
                 <div class="text-center min-w-0 flex-shrink-0">
                   <div class="flex items-center gap-1">
                     <i class="pi pi-star-fill text-yellow-400 text-lg lg:text-xl"></i>
-                      <span class="text-base lg:text-lg font-bold text-gray-900 dark:text-white">{{ (resource.rating || 0).toFixed(1) }}</span>
+                      <span class="text-base lg:text-lg font-bold text-gray-900 dark:text-white">{{ resource.submitterId === 'pansou' ? '暂无' : (resource.rating == null ? '暂无' : resource.rating.toFixed(1)) }}</span>
                   </div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('rating_count_format', { count: (resource.ratingCount || 0).toString() }) }}</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ resource.submitterId === 'pansou' ? '暂无资源评分' : t('rating_count_format', { count: (resource.ratingCount || 0).toString() }) }}</div>
                 </div>
                 <div class="text-center min-w-0 flex-shrink-0">
-                  <div class="text-lg lg:text-xl font-bold text-gray-900 dark:text-white truncate">{{ resource.fileSize }}</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('file_size') }}</div>
+                  <div class="text-lg lg:text-xl font-bold text-gray-900 dark:text-white truncate">{{ resource.fileSize || '未知' }}</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('file_size') }}<span v-if="resource.submitterId === 'pansou' && resource.fileSize">（标题推断）</span></div>
                 </div>
                 <div class="text-center min-w-0 flex-shrink-0">
-                  <div class="text-base lg:text-lg font-semibold text-gray-900 dark:text-white truncate">{{ getResolutionByCode(resource.resolution)?.label }}</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('resolution') }}</div>
+                  <div class="text-base lg:text-lg font-semibold text-gray-900 dark:text-white truncate">{{ getResolutionByCode(resource.resolution)?.label || '未知' }}</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('resolution') }}<span v-if="resource.submitterId === 'pansou' && resource.resolution">（标题推断）</span></div>
                 </div>
                 <div class="text-center min-w-0 flex-shrink-0">
-                  <div class="text-base lg:text-lg font-medium text-gray-900 dark:text-white truncate" :title="getVideoCodecByCode(resource.videoCodec)?.label">{{ getVideoCodecByCode(resource.videoCodec)?.label }}</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('video_codec') }}</div>
+                  <div class="text-base lg:text-lg font-medium text-gray-900 dark:text-white truncate" :title="getVideoCodecByCode(resource.videoCodec)?.label">{{ getVideoCodecByCode(resource.videoCodec)?.label || '未知' }}</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('video_codec') }}<span v-if="resource.submitterId === 'pansou' && resource.videoCodec">（标题推断）</span></div>
                 </div>
                 <div class="text-center min-w-0 flex-shrink-0">
-                  <div class="text-base lg:text-lg font-medium text-gray-900 dark:text-white truncate" :title="getAudioCodecByCode(resource.audioCodec)?.label">{{ getAudioCodecByCode(resource.audioCodec)?.label }}</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('audio_codec') }}</div>
+                  <div class="text-base lg:text-lg font-medium text-gray-900 dark:text-white truncate" :title="getAudioCodecByCode(resource.audioCodec)?.label">{{ getAudioCodecByCode(resource.audioCodec)?.label || '未知' }}</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('audio_codec') }}<span v-if="resource.submitterId === 'pansou' && resource.audioCodec">（标题推断）</span></div>
                 </div>
               </div>
               <!-- 右侧：操作按钮 -->
