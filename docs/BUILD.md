@@ -4,9 +4,18 @@
 
 ## 1. 准备代码
 
-下载 [MoviCloud v1.0.6](https://github.com/MoviCloud-com/movicloud-app/releases/tag/v1.0.6) 的原始源码，复制为独立工作树；对照差异集成已核对的 PanSou 适配代码：`composables/useMoviCloudAPI.ts`、`pages/[type]/[id].vue` 和 `server/api/pansou/search.post.ts`。**本仓库尚未提交最终完整补丁**；不能仅凭本文重现融合版。
+下载 [MoviCloud v1.0.6](https://github.com/MoviCloud-com/movicloud-app/releases/tag/v1.0.6) 的原始源码，复制为独立工作树；对照差异集成已核对的 PanSou 适配代码：`composables/useMoviCloudAPI.ts`、`pages/[type]/[id].vue` 和 `server/api/pansou/search.post.ts`。**本仓库已提交三个核心融合文件**。可使用下面的脚本将它们复制到干净的 MoviCloud v1.0.6 工作树中。注意仓库不是完整上游源码，且脚本会覆盖目标工作树的两个上游文件。
 
-确保个人网盘管理及 `SaveShareDialog.vue`、`useCloudFileManagement.ts` 等原有逻辑未被覆盖。
+执行示例（将仓库与上游源代码放在相邻目录）：
+
+```bash
+cd /vol1/1000/Docker/movicloud-build
+bash MoviCloud-PanSou/scripts/apply-to-movicloud-1.0.6.sh movicloud-app-1.0.6
+```
+
+脚本检查 `package.json` 为 1.0.6，自动备份两个被覆盖的源码文件；**建议先复制一份官方源码作为工作树**，不要在原始目录直接打补丁。完成后检查差异，并确认个人网盘管理及 `SaveShareDialog.vue`、`useCloudFileManagement.ts` 等原有逻辑未受影响。
+
+备注：已提交的 `useMoviCloudAPI.ts` 沿用了原补丁中的 `CLIENT_VERSION = '1.0.5'`，这与上游 1.0.6 的版本号不一致。当前已运行版本的影响尚未逐项验证；建议在进一步发行前排查这一处版本标识。
 
 ## 2. Docker 编译
 
