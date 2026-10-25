@@ -116,10 +116,21 @@ const {
 const showPanSouFileDetails = ref(false)
 const detailShareUrl = ref('')
 const detailDriveCode = ref('')
+const detailTargetResource = ref<any>(null)
 const openPanSouDetails = (resource: ResourceItem) => {
+  detailTargetResource.value = resource
   detailShareUrl.value = resource.driveLink
   detailDriveCode.value = resource.cloudDriveCode
   showPanSouFileDetails.value = true
+}
+const applyPanSouMetadata = (metadata: { fileSize: string; resolution: string; videoCodec: string; audioCodec: string; metadataSource: string }) => {
+  const resource = detailTargetResource.value
+  if (!resource) return
+  resource.fileSize = metadata.fileSize || ''
+  resource.resolution = metadata.resolution || ''
+  resource.videoCodec = metadata.videoCodec || ''
+  resource.audioCodec = metadata.audioCodec || ''
+  resource.metadataSource = metadata.metadataSource
 }
 const showSaveShareDialog = ref(false)
 const currentSaveShareUrl = ref('')
@@ -1486,7 +1497,7 @@ watch(() => mediaImages.value, () => {
                     <h4 class="font-bold text-gray-900 dark:text-white text-base lg:text-xl group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors duration-300 truncate">
                         {{ getDriveById(resource.cloudDriveCode)?.name }}
                       </h4>
-                    <span class="inline-block text-xs text-gray-400 dark:text-gray-500 mt-1 truncate">{{ resource.submitterId === 'pansou' ? (resource.title || 'PanSou 资源') : getResourceTypeByCode(resource.resourceType)?.label }}</span>
+                    <span class="inline-block text-xs text-gray-400 dark:text-gray-500 mt-1 truncate">{{ resource.submitterId === 'pansou' ? 'PanSou 资源' : getResourceTypeByCode(resource.resourceType)?.label }}</span>
                   </div>
                 </div>
               </div>
@@ -1501,7 +1512,7 @@ watch(() => mediaImages.value, () => {
                 </div>
                 <div class="text-center min-w-0 flex-shrink-0">
                   <div class="text-lg lg:text-xl font-bold text-gray-900 dark:text-white truncate">{{ resource.fileSize || '未知' }}</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('file_size') }}<span v-if="resource.submitterId === 'pansou' && resource.fileSize">（标题推断）</span></div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('file_size') }}<span v-if="resource.submitterId === 'pansou' && resource.fileSize">（网盘文件）</span></div>
                 </div>
                 <div class="text-center min-w-0 flex-shrink-0">
                   <div class="text-base lg:text-lg font-semibold text-gray-900 dark:text-white truncate">{{ getResolutionByCode(resource.resolution)?.label || '未知' }}</div>
@@ -1873,6 +1884,7 @@ watch(() => mediaImages.value, () => {
     :share-url="detailShareUrl"
     :drive-code="detailDriveCode"
     :accounts="getValidAccountsForDrive(detailDriveCode)"
+    @metadata="applyPanSouMetadata"
   />
   <SaveShareDialog
     v-model:visible="showSaveShareDialog"
