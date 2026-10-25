@@ -47,10 +47,13 @@ cp -a movicloud-pansou-1.0.6/dist/fnOS movicloud-pansou/app/runtime/fnOS
 ## 4. 打包
 
 ```bash
-cd /vol1/1000/Docker/movicloud-build/movicloud-pansou
-bash -n cmd/main
-fnpack build
-ls -lh movicloud-pansou.fpk
+cd /vol1/1000/Docker/movicloud-build
+bash MoviCloud-PanSou/scripts/pack-fnos.sh \
+  movicloud-pansou-release movicloud-pansou
 ```
+
+此脚本会备份 FPK 工程中原有的 `app/runtime/fnOS`、复制最新构建产物、检查应用 ID/端口/PanSou 环境变量、执行 `fnpack build` 并输出 SHA-256。它**不会升级已安装的 fnOS 应用**。首次打包前仍须完成第 3 步的 Node 与 fnOS 配置；脚本只适用于本项目此前准备的打包工程。
+
+若你仍使用先前的源码工作树名称 `movicloud-pansou-1.0.6`，需把第一个路径换成它，但务必先同步 GitHub 的修正版文件并重新构建。
 
 `Packing successfully` 只说明格式打包成功；还需在 fnOS 中验证独立安装、首次初始化、登录、电影/电视剧搜索、夸克/UC 转存与卸载数据行为。
