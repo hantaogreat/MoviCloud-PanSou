@@ -2,7 +2,7 @@
 
 > 非官方社区集成项目。基于 [MoviCloud](https://github.com/MoviCloud-com/movicloud-app) v1.0.6，接入 [PanSou](https://github.com/fish2018/pansou) 网盘聚合搜索。与上游项目维护团队无隶属关系。
 
-**发布状态：私有仓库准备阶段。** 已在一台 x86_64 飞牛 fnOS 上验证 FPK 安装、影视资源搜索、夸克资源打开与账号内分享转存。**本仓库暂未上传完整适配源码或 FPK，不能直接通过此仓库下载安装融合版。** 发布完整二进制前需确认上游代码再分发许可，并核查敏感信息。
+**发布状态：私有仓库准备阶段。** 已在一台 x86_64 飞牛 fnOS 上验证 FPK 安装、影视资源搜索、夸克资源打开与账号内分享转存。**本仓库已上传三个核心融合文件，但尚未上传完整上游源码或 FPK，不能直接通过此仓库下载安装融合版。** 发布完整二进制前需确认上游代码再分发许可，并核查敏感信息。
 
 ## 功能
 
@@ -40,7 +40,7 @@ MoviCloud 影视详情页
 4. 按安装向导填写 TMDB 配置、管理员账户；按需绑定支持的个人网盘账户。
 5. 打开影视详情 →「下载资源」→ 选择网盘类别。点击外链图标打开分享链接；对有效的夸克账号及同类型分享，可以使用云朵转存按钮。
 
-完整步骤：[安装与使用](docs/INSTALL.md) · [构建 FPK](docs/BUILD.md) · [故障排查](docs/TROUBLESHOOTING.md) · [发布前检查](docs/PUBLISH.md)
+完整步骤：[安装与使用](docs/INSTALL.md) · [构建 FPK](docs/BUILD.md) · [故障排查](docs/TROUBLESHOOTING.md) · [Release 指南](docs/RELEASE.md) · [发布前检查](docs/PUBLISH.md)
 
 ## 致谢
 
