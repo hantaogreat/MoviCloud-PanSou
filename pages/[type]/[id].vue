@@ -6,6 +6,7 @@ import SelectButton from '../../volt/SelectButton.vue';
 import InputText from '../../volt/InputText.vue'
 import Card from '../../volt/Card.vue'
 import SaveShareDialog from '../../components/SaveShareDialog.vue'
+import PanSouFileDetailsDialog from '../../components/PanSouFileDetailsDialog.vue'
 import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
 import { t } from '../../composables/useI18n'
 import { useRoute } from 'vue-router'
@@ -112,6 +113,14 @@ const {
   loadAccounts: loadCloudDriveAccounts 
 } = useCloudDriveAccounts()
 
+const showPanSouFileDetails = ref(false)
+const detailShareUrl = ref('')
+const detailDriveCode = ref('')
+const openPanSouDetails = (resource: ResourceItem) => {
+  detailShareUrl.value = resource.driveLink
+  detailDriveCode.value = resource.cloudDriveCode
+  showPanSouFileDetails.value = true
+}
 const showSaveShareDialog = ref(false)
 const currentSaveShareUrl = ref('')
 const currentSaveShareDriveCode = ref('')
@@ -1517,6 +1526,12 @@ watch(() => mediaImages.value, () => {
                   <i class="pi pi-external-link text-base lg:text-lg"></i>
                 </button>
                 <button
+                  v-if="resource.submitterId === 'pansou' && ['quark', 'uc'].includes(resource.cloudDriveCode)"
+                  type="button" @click="openPanSouDetails(resource)"
+                  class="px-3 h-10 lg:h-12 bg-sky-100 hover:bg-sky-200 dark:bg-sky-900/30 text-sky-800 dark:text-sky-200 rounded-xl text-sm"
+                  title="按需读取夸克或 UC 分享目录中的真实文件名和大小"
+                >文件详情</button>
+                <button
                   v-if="canShowSaveButton(resource.cloudDriveCode)"
                   @click="openSaveShareDialog(resource.driveLink, resource.cloudDriveCode)"
                   class="w-10 h-10 lg:w-12 lg:h-12 bg-blue-100 hover:bg-blue-200 dark:bg-blue-700/20 dark:hover:bg-blue-700/30 text-blue-600 dark:text-blue-400 rounded-xl transition-all duration-300 flex items-center justify-center shadow-lg hover:shadow-xl transform hover:scale-110"
@@ -1853,6 +1868,12 @@ watch(() => mediaImages.value, () => {
     </template>
   </Dialog>
 
+  <PanSouFileDetailsDialog
+    v-model:visible="showPanSouFileDetails"
+    :share-url="detailShareUrl"
+    :drive-code="detailDriveCode"
+    :accounts="getValidAccountsForDrive(detailDriveCode)"
+  />
   <SaveShareDialog
     v-model:visible="showSaveShareDialog"
     :share-url="currentSaveShareUrl"
