@@ -1512,19 +1512,19 @@ watch(() => mediaImages.value, () => {
                 </div>
                 <div class="text-center min-w-0 flex-shrink-0">
                   <div class="text-lg lg:text-xl font-bold text-gray-900 dark:text-white truncate">{{ resource.fileSize || '未知' }}</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('file_size') }}<span v-if="resource.submitterId === 'pansou' && resource.fileSize">（网盘文件）</span></div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('file_size') }}<span v-if="resource.submitterId === 'pansou' && resource.fileSize">（网盘返回）</span></div>
                 </div>
                 <div class="text-center min-w-0 flex-shrink-0">
                   <div class="text-base lg:text-lg font-semibold text-gray-900 dark:text-white truncate">{{ getResolutionByCode(resource.resolution)?.label || '未知' }}</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('resolution') }}<span v-if="resource.submitterId === 'pansou' && resource.resolution">（标题推断）</span></div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('resolution') }}<span v-if="resource.submitterId === 'pansou' && resource.resolution">（文件名识别）</span></div>
                 </div>
                 <div class="text-center min-w-0 flex-shrink-0">
                   <div class="text-base lg:text-lg font-medium text-gray-900 dark:text-white truncate" :title="getVideoCodecByCode(resource.videoCodec)?.label">{{ getVideoCodecByCode(resource.videoCodec)?.label || '未知' }}</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('video_codec') }}<span v-if="resource.submitterId === 'pansou' && resource.videoCodec">（标题推断）</span></div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('video_codec') }}<span v-if="resource.submitterId === 'pansou' && resource.videoCodec">（文件名识别）</span></div>
                 </div>
                 <div class="text-center min-w-0 flex-shrink-0">
                   <div class="text-base lg:text-lg font-medium text-gray-900 dark:text-white truncate" :title="getAudioCodecByCode(resource.audioCodec)?.label">{{ getAudioCodecByCode(resource.audioCodec)?.label || '未知' }}</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('audio_codec') }}<span v-if="resource.submitterId === 'pansou' && resource.audioCodec">（标题推断）</span></div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('audio_codec') }}<span v-if="resource.submitterId === 'pansou' && resource.audioCodec">（文件名识别）</span></div>
                 </div>
               </div>
               <!-- 右侧：操作按钮 -->
