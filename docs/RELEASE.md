@@ -1,6 +1,6 @@
 # 准备 GitHub Release（私有仓库）
 
-当前仓库**尚未发布 Release**。已在用户的飞牛设备生成过可安装 FPK，但其二进制尚未上传仓库；公开分发须先核对 MoviCloud 源码授权、Node.js 随包许可及个人数据安全。
+已在用户的飞牛设备生成 FPK，且 GitHub **v1.0.6-pansou.1 Pre-release 已发布**，FPK 二进制已上传。当前仓库仍为 **Private**；公开分发须先核对 MoviCloud 源码授权、Node.js 随包许可及个人数据安全。
 
 ## 1. 检查本地最终安装包
 
@@ -21,7 +21,7 @@ sha256sum "$FPK"
 - 附上 `RELEASE-NOTES-TEMPLATE.md` 中的已验证功能与限制
 - 不要勾选自动公开仓库；Release 可见性受仓库权限限制
 
-**本仓库目前并未由助手创建 Release 或上传 FPK**；请勿把草稿说明视为现成下载文件。
+**用户已通过 GitHub 网页创建 Pre-release 并上传 FPK。** 仓库仍为 Private。当前 Release 正文仅有指向模板的占位文字，应通过 GitHub 的 Edit release 替换成正式说明。
 
 ## 3. 公开之前
 
@@ -41,6 +41,14 @@ sha256sum "$FPK"
 - `fnpack build` 输出：`Packing successfully`
 - SHA-256：`70cb447febd48f3bbb64629314ae24f55dd18cd95746476d2f9d9d27b2c6063c`
 - 来源：用户在 fnOS NAS 上执行编译和打包后提供的终端输出；助手尚未取得该二进制做独立校验
-- 状态：**本地构建完成；用户确认 8/8 项安装与功能回归测试通过；GitHub Release 尚未创建**
+- 状态：**本地构建完成；用户确认 8/8 项安装与功能回归测试通过；GitHub Pre-release 已由用户发布**
 
 安装/升级、15079 端口、初始化或数据加载、电影搜索、电视剧搜索、夸克转存、UC 转存和重启后的功能测试均已通过（用户实测反馈）。上线前仍建议对准备上传的 FPK 附件重新计算 SHA-256，确认与本记录一致。此测试结果不等于跨设备或安全审计通过。
+
+## GitHub Release 实际核验
+
+- Release：[v1.0.6-pansou.1](https://github.com/hantaogreat/MoviCloud-PanSou/releases/tag/v1.0.6-pansou.1)
+- `draft=false`，`prerelease=true`；仓库 `Private`
+- 附件 `movicloud-pansou.fpk`：上传完成，文件大小 138089982 字节
+- GitHub 记录的附件 digest：`sha256:70cb447febd48f3bbb64629314ae24f55dd18cd95746476d2f9d9d27b2c6063c`，与 NAS 记录一致
+- Release 网页 Description 仍为 `使用仓库中的 RELEASE-NOTES-TEMPLATE.md`，需编辑成完整发行说明
