@@ -15,7 +15,7 @@ bash MoviCloud-PanSou/scripts/apply-to-movicloud-1.0.6.sh movicloud-app-1.0.6
 
 脚本检查 `package.json` 为 1.0.6，自动备份两个被覆盖的源码文件；**建议先复制一份官方源码作为工作树**，不要在原始目录直接打补丁。完成后检查差异，并确认个人网盘管理及 `SaveShareDialog.vue`、`useCloudFileManagement.ts` 等原有逻辑未受影响。
 
-备注：已提交的 `useMoviCloudAPI.ts` 沿用了原补丁中的 `CLIENT_VERSION = '1.0.5'`，这与上游 1.0.6 的版本号不一致。当前已运行版本的影响尚未逐项验证；建议在进一步发行前排查这一处版本标识。
+版本一致性：已核对 MoviCloud 官方 v1.0.6 源码，并把本仓库 `CLIENT_VERSION` 修正为 `1.0.6`。**在此修复前生成的 FPK 不包含该更改，需要重新编译与打包。**
 
 ## 2. Docker 编译
 
