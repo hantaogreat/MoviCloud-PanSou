@@ -1,0 +1,654 @@
+import { ref, readonly } from 'vue'
+import { useDev } from './useDev'
+
+// MoviCloud API 服务
+const API_BASE_URL = import.meta.dev ? 'http://localhost:8000' : 'https://api.movicloud.com'
+const CLIENT_VERSION = '1.0.5'
+
+// 缓存的系统ID
+let cachedSystemId: string | null = null
+
+// 从数据库获取系统ID
+const getSystemIdFromDatabase = async (): Promise<string> => {
+  const { log, error: devError } = useDev()
+  
+  if (cachedSystemId) {
+    return cachedSystemId
+  }
+  try {
+    const storedSystemId = localStorage.getItem('movicloud_system_id')
+    if (storedSystemId) {
+      cachedSystemId = storedSystemId
+      return storedSystemId
+    }
+    const installResponse = await fetch('/api/install/check')
+    const installData = await installResponse.json()
+    if (!installData.isInstalled) {
+      throw new Error('系统尚未安装，请先完成安装')
+    }
+    const response = await fetch('/api/settings/system-id')
+    const data = await response.json()
+    if (data.success && data.system_id) {
+      cachedSystemId = data.system_id
+      localStorage.setItem('movicloud_system_id', data.system_id)
+      return data.system_id
+    }
+    devError('系统已安装但无法获取系统ID，可能是数据库配置问题')
+    throw new Error('系统ID获取失败，请检查数据库配置')
+  } catch (error) {
+    devError('获取系统ID失败:', error)
+    throw error
+  }
+}
+
+// 获取请求头部
+const getHeaders = async (): Promise<HeadersInit> => {
+  const systemId = await getSystemIdFromDatabase()
+  const config = useRuntimeConfig()
+  return {
+    'Content-Type': 'application/json',
+    'X-System-ID': systemId,
+    'X-Client-Version': CLIENT_VERSION,
+    'X-Request-Timestamp': Date.now().toString(),
+    'X-Client-Platform': config.public.platform as string
+  }
+}
+
+// 通用请求函数
+const request = async (url: string, options: RequestInit = {}): Promise<any> => {
+  const { error: devError } = useDev()
+  
+  try {
+    const headers = await getHeaders()
+    const response = await fetch(`${API_BASE_URL}${url}`, {
+      ...options,
+      headers: {
+        ...headers,
+        ...options.headers
+      }
+    })
+
+    const data = await response.json()
+    
+    if (!data.success) {
+      throw new Error(data.message || '请求失败')
+    }
+    
+    return data.data
+  } catch (error) {
+    devError('API请求失败:', error)
+    throw error
+  }
+}
+
+// PanSou 影视资源搜索。与个人网盘文件搜索及 MoviCloud 原有写入 API 分离。
+const searchPanSou = async (mediaId: string, title: string, type: 'movie' | 'tv'): Promise<ResourceItem[]> => {
+  if (!title.trim()) return []
+  const data = await $fetch<{ resources: ResourceItem[] }>('/api/pansou/search', {
+    method: 'POST',
+    body: { title: title.trim(), mediaId: Number(mediaId), type }
+  })
+  return data.resources || []
+}
+
+const getMovieResources = async (mediaId: string, title = ''): Promise<ResourceItem[]> => {
+  return searchPanSou(mediaId, title, 'movie')
+}
+
+const getTVResources = async (mediaId: string, seasonNumber: number, episodeNumber?: number, title = ''): Promise<ResourceItem[]> => {
+  return searchPanSou(mediaId, title, 'tv')
+}
+
+// 提交电影资源
+const submitMovieResource = async (resourceData: {
+  mediaId: number
+  resourceType: string
+  cloudDriveCode: string
+  driveLink: string
+  resolution: string
+  fileSize?: string
+  videoCodec?: string
+  audioCodec?: string
+}): Promise<ResourceItem> => {
+  return await request('/api/movie', {
+    method: 'POST',
+    body: JSON.stringify(resourceData)
+  })
+}
+
+// 提交电视剧资源
+const submitTVResource = async (resourceData: {
+  mediaId: number
+  seasonNumber: number
+  episodeNumber?: number
+  resourceType: string
+  cloudDriveCode: string
+  driveLink: string
+  resolution: string
+  fileSize?: string
+  videoCodec?: string
+  audioCodec?: string
+}): Promise<ResourceItem> => {
+  return await request('/api/tv', {
+    method: 'POST',
+    body: JSON.stringify(resourceData)
+  })
+}
+
+// 评分资源
+const rateResource = async (resourceId: number, rating: number, type: 'movie' | 'tv' = 'movie', comment?: string): Promise<{
+  id: number
+  rating: number
+  ratingCount: number
+}> => {
+  const systemId = await getSystemIdFromDatabase()
+  const endpoint = type === 'tv' ? `/api/tv/${resourceId}/rate` : `/api/movie/${resourceId}/rate`
+  return await request(endpoint, {
+    method: 'POST',
+    body: JSON.stringify({
+      rating,
+      comment,
+      systemId
+    })
+  })
+}
+
+// 举报资源
+const reportResource = async (resourceId: number, reason: string, type: 'movie' | 'tv' = 'movie', description?: string): Promise<{
+  id: number
+  resourceId: number
+  systemId: string
+  reason: string
+  description?: string
+  status: string
+  resourceType: string
+  createdAt: string
+}> => {
+  const systemId = await getSystemIdFromDatabase()
+  const endpoint = type === 'tv' ? `/api/tv/${resourceId}/report` : `/api/movie/${resourceId}/report`
+  return await request(endpoint, {
+    method: 'POST',
+    body: JSON.stringify({
+      reason,
+      description,
+      systemId
+    })
+  })
+}
+
+// 健康检查
+const healthCheck = async (): Promise<{
+  message: string
+  version: string
+  timestamp: number
+}> => {
+  return await request('/')
+}
+
+// 通知相关类型
+export interface Notification {
+  id: string
+  type: string
+  title: string
+  content: string
+  data?: Record<string, any>
+  is_read: boolean
+  read_at: string | null
+  created_at: string
+}
+
+export interface NotificationListResponse {
+  notifications: Notification[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    pages: number
+  }
+}
+
+export interface UnreadCountResponse {
+  unread_count: number
+}
+
+// 获取通知列表
+const getNotifications = async (params?: {
+  page?: number
+  limit?: number
+  type?: string
+  is_read?: boolean
+}): Promise<NotificationListResponse> => {
+  const queryParams = new URLSearchParams()
+  if (params?.page) queryParams.append('page', params.page.toString())
+  if (params?.limit) queryParams.append('limit', params.limit.toString())
+  if (params?.type) queryParams.append('type', params.type)
+  if (params?.is_read !== undefined) queryParams.append('is_read', params.is_read.toString())
+  
+  const url = `/api/notifications${queryParams.toString() ? `?${queryParams.toString()}` : ''}`
+  return await request(url)
+}
+
+// 获取未读通知数量
+const getUnreadNotificationCount = async (): Promise<UnreadCountResponse> => {
+  return await request('/api/notifications/unread-count')
+}
+
+// 标记通知为已读
+const markNotificationAsRead = async (notificationId: string): Promise<void> => {
+  await request(`/api/notifications/${notificationId}/read`, {
+    method: 'POST'
+  })
+}
+
+// 标记所有通知为已读
+const markAllNotificationsAsRead = async (): Promise<void> => {
+  await request('/api/notifications/read-all', {
+    method: 'POST'
+  })
+}
+
+// 网盘申请相关类型
+export interface ClaimStep {
+  title: string
+  content: string
+  image: string | null
+}
+
+export interface TableColumn {
+  key: string
+  label: string
+}
+
+export interface TableRow {
+  [key: string]: string
+}
+
+export interface MemberBenefits {
+  columns: TableColumn[]
+  rows: TableRow[]
+}
+
+export interface CapacityBenefits {
+  columns: TableColumn[]
+  rows: TableRow[]
+}
+
+export interface TaskValidity {
+  columns: TableColumn[]
+  rows: TableRow[]
+}
+
+export interface NetdiskProject {
+  id: number
+  icon: string
+  name: string
+  theme_color: string
+  claim_instructions: string
+  claim_steps: ClaimStep[]
+  member_benefits: MemberBenefits
+  capacity_benefits: CapacityBenefits
+  task_validity: TaskValidity
+  notes: string[]
+  is_active: boolean
+  sort_order: number
+}
+
+export interface ApplicationField {
+  field_key: string
+  field_label: string
+  field_type: 'text' | 'textarea' | 'select' | 'file'
+  is_required: boolean
+  placeholder?: string
+  field_options?: string[]
+}
+
+export interface ProjectDetails {
+  id: number
+  name: string
+  application_fields: ApplicationField[]
+}
+
+export interface MemberApplication {
+  id: number
+  project: {
+    id: number
+    name: string
+    icon: string
+    theme_color?: string
+  }
+  status: 'pending' | 'submitted' | 'approved' | 'rejected'
+  application_materials: Record<string, any> | Array<{ key: string; label: string; value: any }>
+  reject_reason: string | null
+  reviewer: string | null | { id: number; username: string; email: string }
+  reviewed_at: string | null
+  created_at: string
+}
+
+export interface SubmitMemberApplicationRequest {
+  project_id: number
+  application_materials: Record<string, any>
+}
+
+// 订阅相关类型
+export interface SubscriptionItem {
+  id: number
+  media_id: number
+  media_type: 'movie' | 'tv'
+  title?: string
+  poster_path?: string
+  backdrop_path?: string
+  release_date?: string
+  vote_average?: number
+  status?: string
+  created_at: string
+}
+
+// 订阅资源
+const subscribeToMedia = async (mediaType: string, mediaId: number): Promise<void> => {
+  const systemId = await getSystemIdFromDatabase()
+  await request('/api/subscriptions', {
+    method: 'POST',
+    body: JSON.stringify({
+      resourceType: mediaType,
+      mediaId: mediaId
+    })
+  })
+}
+
+// 取消订阅
+const unsubscribeFromMedia = async (mediaType: string, mediaId: number): Promise<void> => {
+  const systemId = await getSystemIdFromDatabase()
+  await request(`/api/subscriptions`, {
+    method: 'DELETE',
+    body: JSON.stringify({
+      resourceType: mediaType,
+      mediaId: mediaId
+    })
+  })
+}
+
+// 检查订阅状态
+const checkSubscriptionStatus = async (mediaType: string, mediaId: number): Promise<boolean> => {
+  const systemId = await getSystemIdFromDatabase()
+  // 如果没有系统ID，说明未安装或未配置，直接返回未订阅
+  if (!systemId) return false
+  
+  try {
+    const response = await request(`/api/subscriptions/check?resourceType=${mediaType}&mediaId=${mediaId}`)
+    return response.isSubscribed
+  } catch (error) {
+    return false
+  }
+}
+
+// 获取我的订阅列表
+const getMySubscriptions = async (params?: { page?: number; limit?: number }): Promise<{
+  data: SubscriptionItem[]
+  total: number
+  current_page: number
+  last_page: number
+}> => {
+  const systemId = await getSystemIdFromDatabase()
+  const queryParams = new URLSearchParams()
+  queryParams.append('system_id', systemId)
+  if (params?.page) queryParams.append('page', params.page.toString())
+  if (params?.limit) queryParams.append('limit', params.limit.toString())
+  
+  const response = await request(`/api/subscriptions?${queryParams.toString()}`)
+  
+  // 适配新的API响应格式
+  const subscriptions = response.subscriptions || []
+  const mappedSubscriptions = subscriptions.map((item: any) => ({
+    id: item.id,
+    media_id: item.mediaId,
+    media_type: item.resourceType,
+    created_at: item.createdAt,
+    title: item.title,
+    poster_path: item.posterPath,
+    backdrop_path: item.backdropPath,
+    release_date: item.releaseDate,
+    vote_average: item.voteAverage,
+    status: item.status
+  }))
+
+  const total = response.total || 0
+  const limit = params?.limit || 20
+  
+  return {
+    data: mappedSubscriptions,
+    total: total,
+    current_page: params?.page || 1,
+    last_page: Math.ceil(total / limit)
+  }
+}
+
+// 获取我的资源列表（已发布/已保存）
+const getMyResources = async (params?: { page?: number; limit?: number; type?: 'movie' | 'tv' }): Promise<{
+  data: ResourceItem[]
+  total?: number
+  current_page?: number
+  last_page?: number
+}> => {
+  const queryParams = new URLSearchParams()
+  if (params?.page) queryParams.append('page', params.page.toString())
+  if (params?.limit) queryParams.append('limit', params.limit.toString())
+  if (params?.type) queryParams.append('type', params.type)
+  
+  const response = await request(`/api/my/resources?${queryParams.toString()}`)
+  
+  // 适配API响应格式 { resources: [], total: 104 }
+  if (response.resources) {
+    const limit = params?.limit || 20
+    const total = response.total || 0
+    return {
+      data: response.resources,
+      total: total,
+      current_page: params?.page || 1,
+      last_page: Math.ceil(total / limit)
+    }
+  }
+  
+  return response
+}
+
+// 获取可申请项目列表
+const getNetdiskProjects = async (): Promise<NetdiskProject[]> => {
+  return await request('/api/netdisk-applications/projects')
+}
+
+// 获取项目详情
+const getNetdiskProjectDetails = async (projectId: number): Promise<ProjectDetails> => {
+  return await request(`/api/netdisk-applications/projects/${projectId}`)
+}
+
+// 提交会员申请
+const submitMemberApplication = async (data: SubmitMemberApplicationRequest): Promise<MemberApplication> => {
+  return await request('/api/netdisk-applications/member', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+}
+
+// 查看我的申请
+const getMyApplications = async (): Promise<MemberApplication[]> => {
+  const response = await request('/api/netdisk-applications/member/my')
+  // API 返回的是分页数据，需要从 data.data 中获取实际的申请记录数组
+  if (response && response.data && Array.isArray(response.data)) {
+    return response.data
+  }
+  // 如果返回的已经是数组，直接返回
+  if (Array.isArray(response)) {
+    return response
+  }
+  return []
+}
+
+// 上传网盘申请图片
+interface UploadImageResponse {
+  url: string
+  path: string
+}
+
+const uploadNetdiskImage = async (file: File): Promise<UploadImageResponse> => {
+  const { error: devError } = useDev()
+  
+  try {
+    // 验证文件类型
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+    if (!allowedTypes.includes(file.type)) {
+      throw new Error('不支持的图片格式，仅支持 jpeg, jpg, png, gif, webp')
+    }
+    
+    // 验证文件大小（5MB）
+    const maxSize = 5 * 1024 * 1024 // 5MB
+    if (file.size > maxSize) {
+      throw new Error('图片大小不能超过 5MB')
+    }
+    
+    const systemId = await getSystemIdFromDatabase()
+    const formData = new FormData()
+    formData.append('image', file)
+    
+    const response = await fetch(`${API_BASE_URL}/api/netdisk-applications/upload-image`, {
+      method: 'POST',
+      headers: {
+        'X-System-ID': systemId,
+        'X-Client-Version': CLIENT_VERSION,
+        'X-Request-Timestamp': Date.now().toString()
+        // 不设置 Content-Type，让浏览器自动设置 multipart/form-data 边界
+      },
+      body: formData
+    })
+    
+    const data = await response.json()
+    
+    if (!data.success) {
+      throw new Error(data.message || '图片上传失败')
+    }
+    
+    return data.data
+  } catch (error) {
+    devError('图片上传失败:', error)
+    throw error
+  }
+}
+
+export interface NetdiskSummary {
+  date: string
+  new_total: number
+  transfer_total: number
+}
+
+// 获取网盘推广数据汇总
+const getNetdiskSummary = async (applicationId: number): Promise<NetdiskSummary> => {
+  return await request(`/api/netdisk/summary/${applicationId}`)
+}
+
+// API响应类型
+interface APIResponse<T = any> {
+  success: boolean
+  code: number
+  message: string
+  data?: T
+  timestamp: number
+}
+
+// 资源类型
+export interface ResourceItem {
+  id: number
+  mediaId: number
+  seasonNumber?: number | null
+  episodeNumber?: number | null
+  resourceType: string
+  cloudDriveCode: string
+  driveLink: string
+  resolution: string
+  fileSize: string
+  videoCodec: string
+  audioCodec: string
+  submitterId: string
+  status: string
+  reviewNote?: string | null
+  reviewerId?: string | null
+  reviewedAt?: string | null
+  rating?: number | null
+  ratingCount?: number | null
+  createdAt: string
+  updatedAt: string
+  type: 'movie' | 'tv'
+  
+  // 前端辅助字段
+  title?: string
+  poster_path?: string
+}
+
+// 评分请求类型
+interface RatingRequest {
+  rating: number
+  comment?: string
+}
+
+// 举报请求类型
+interface ReportRequest {
+  report_type: string
+  description: string
+}
+
+// 提交资源请求类型
+interface SubmitResourceRequest {
+  media_id: string
+  media_type: string
+  season_number?: number | null
+  episode_number?: number | null
+  resource_type: string
+  cloud_drive_code: string
+  drive_link: string
+  resolution: string
+  file_size: string
+  video_codec: string
+  audio_codec: string
+}
+
+export const useMoviCloudAPI = () => {
+  const loading = ref(false)
+  const error = ref('')
+
+  return {
+    // 状态
+    loading: readonly(loading),
+    error: readonly(error),
+    
+    // API函数
+    getMovieResources,
+    getTVResources,
+    submitMovieResource,
+    submitTVResource,
+    rateResource,
+    reportResource,
+    healthCheck,
+    
+    // 通知API函数
+    getNotifications,
+    getUnreadNotificationCount,
+    markNotificationAsRead,
+    markAllNotificationsAsRead,
+    
+    // 订阅相关API
+    subscribeToMedia,
+    unsubscribeFromMedia,
+    checkSubscriptionStatus,
+    getMySubscriptions,
+    getMyResources,
+
+    // 网盘申请API函数
+    getNetdiskProjects,
+    getNetdiskProjectDetails,
+    submitMemberApplication,
+    getMyApplications,
+    uploadNetdiskImage,
+    getNetdiskSummary,
+    
+    // 工具函数
+    getSystemIdFromDatabase
+  }
+} 
