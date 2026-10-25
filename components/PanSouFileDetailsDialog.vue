@@ -11,7 +11,7 @@ const props = defineProps<{
   driveCode: string
   accounts: CloudDriveAccountInfo[]
 }>()
-const emit = defineEmits<{ (e: 'update:visible', value: boolean): void }>()
+const emit = defineEmits<{ (e: 'update:visible', value: boolean): void; (e: 'metadata', value: { fileSize: string; resolution: string; videoCodec: string; audioCodec: string; metadataSource: string }): void }>()
 const api = useCloudFileManagement()
 const accounts = computed(() => props.accounts.filter(x => x.isValid && !!x.cookie))
 const accountIndex = ref(0)
@@ -31,6 +31,39 @@ const sizeText = (f: any) => {
   return n >= 1073741824 ? (n / 1073741824).toFixed(2) + ' GB'
     : n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB'
     : n >= 1024 ? (n / 1024).toFixed(0) + ' KB' : n + ' B'
+}
+const metadataFromFilename = (name: string, size: unknown) => {
+  const s = name.toLowerCase()
+  const resolution = /(?:4320p|8k)/i.test(s) ? '8k'
+    : /(?:2160p|4k|uhd)/i.test(s) ? '4k'
+    : /1080p/i.test(s) ? '1080p'
+    : /1080i/i.test(s) ? '1080i'
+    : /720p/i.test(s) ? '720p'
+    : /(?:480p|576p|sd)/i.test(s) ? 'sd' : ''
+  const videoCodec = /(?:h[. -]?265|x265|hevc)/i.test(s) ? 'h265'
+    : /(?:h[. -]?264|x264|avc)/i.test(s) ? 'h264'
+    : /\bav1\b/i.test(s) ? 'av1'
+    : /\bvc[ -]?1\b/i.test(s) ? 'vc1'
+    : /mpeg[ -]?2/i.test(s) ? 'mpeg2'
+    : /\bxvid\b/i.test(s) ? 'xvid'
+    : /\bvp9?\b/i.test(s) ? 'vp8' : ''
+  const audioCodec = /dts[. -]?hd/i.test(s) ? 'dtshd'
+    : /\bdts\b/i.test(s) ? 'dts'
+    : /(?:e[. -]?ac3|ddp)/i.test(s) ? 'eac3'
+    : /(?:truehd)/i.test(s) ? 'truehd'
+    : /(?:ac3|\bdd\b)/i.test(s) ? 'ac3'
+    : /\baac\b/i.test(s) ? 'aac' : ''
+  const bytes = Number(size)
+  const fileSize = Number.isFinite(bytes) && bytes >= 0 && size != null
+    ? (bytes >= 1073741824 ? (bytes / 1073741824).toFixed(2) + 'GB'
+      : bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + 'MB'
+      : bytes >= 1024 ? (bytes / 1024).toFixed(0) + 'KB' : bytes + 'B')
+    : ''
+  return { fileSize, resolution, videoCodec, audioCodec, metadataSource: 'share_file_metadata' }
+}
+const applyFileMetadata = (file: any) => {
+  if (isFolder(file)) return
+  emit('metadata', metadataFromFilename(filename(file), file.size))
 }
 const asAccount = (a: CloudDriveAccountInfo): CloudDriveAccount => ({
   id: a.driveCode, name: a.name, cookie: a.cookie || '', driveCode: a.driveCode
@@ -127,10 +160,13 @@ const back = async () => {
           class="flex items-center justify-between gap-3 border-b py-2">
           <button type="button" class="min-w-0 flex-1 truncate text-left"
             :class="isFolder(file) ? 'text-blue-600' : ''"
-            :disabled="!isFolder(file) || busy" @click="openFolder(file)">
+            :disabled="!isFolder(file) || busy" @click="openFolder(file)"
+            :title="filename(file)">
             {{ isFolder(file) ? '📁 ' : '📄 ' }}{{ filename(file) }}
           </button>
           <span class="shrink-0 text-xs text-gray-500">{{ sizeText(file) }}</span>
+          <button v-if="!isFolder(file)" type="button" class="shrink-0 rounded border px-2 py-1 text-xs"
+            :disabled="busy" @click="applyFileMetadata(file)">填入详情</button>
         </div>
         <p class="text-xs text-gray-500">每层最多显示 100 项；仅按需查询，不自动下载媒体文件。</p>
       </div>
