@@ -149,22 +149,27 @@ const scanAllVideoFiles = async () => {
   try {
     while (queue.length && found.length < 2000 && seenFolders.size < 500) {
       const folder = queue.shift()!
-      const result = await api.getShareList(asAccount(a), pwdID.value, stoken.value, folder.id, 1, 100)
-      if (generationAtStart !== generation) return
-      if (!result.success) throw new Error(result.message || '读取子目录失败')
-      const list = Array.isArray(result.data?.list) ? result.data.list : []
-      for (const file of list) {
-        const name = filename(file)
-        const path = folder.path ? folder.path + '/' + name : name
-        if (isFolder(file)) {
-          const id = String(file.fid || '')
-          if (id && !seenFolders.has(id) && folder.depth < 12) {
-            seenFolders.add(id)
-            queue.push({ id, path, depth: folder.depth + 1 })
+      let page = 1
+      while (page <= 20) {
+        const result = await api.getShareList(asAccount(a), pwdID.value, stoken.value, folder.id, page, 100)
+        if (generationAtStart !== generation) return
+        if (!result.success) throw new Error(result.message || '读取子目录失败')
+        const list = Array.isArray(result.data?.list) ? result.data.list : []
+        for (const file of list) {
+          const name = filename(file)
+          const path = folder.path ? folder.path + '/' + name : name
+          if (isFolder(file)) {
+            const id = String(file.fid || '')
+            if (id && !seenFolders.has(id) && folder.depth < 12) {
+              seenFolders.add(id)
+              queue.push({ id, path, depth: folder.depth + 1 })
+            }
+          } else if (isVideoFile(file)) {
+            found.push({ ...file, __fullPath: path })
           }
-        } else if (isVideoFile(file)) {
-          found.push({ ...file, __fullPath: path })
         }
+        if (list.length < 100) break
+        page++
       }
       scanProgress.value = seenFolders.size
     }
