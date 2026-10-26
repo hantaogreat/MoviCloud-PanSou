@@ -1501,11 +1501,11 @@ watch(() => mediaImages.value, () => {
                   </div>
                 </div>
               </div>
-              <!-- 中间：只显示文件大小，不展示评分、片名、分辨率和编码 -->
-              <div class="flex-1 min-w-0 flex justify-center">
-                <div class="text-center min-w-0">
-                  <div class="text-lg lg:text-xl font-bold text-gray-900 dark:text-white truncate">{{ resource.fileSize || '未知' }}</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('file_size') }}</div>
+              <!-- 中间：仅显示资源名称，长名称省略，悬停可看完整内容 -->
+              <div class="flex-1 min-w-0 overflow-hidden">
+                <div class="block w-full truncate text-sm lg:text-base font-medium text-gray-900 dark:text-white"
+                  :title="resource.title || '未提供文件名'">
+                  {{ resource.title || '未提供文件名' }}
                 </div>
               </div>
               <!-- 右侧：操作按钮 -->
