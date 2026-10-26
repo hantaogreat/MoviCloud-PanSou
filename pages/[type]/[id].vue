@@ -1480,9 +1480,9 @@ watch(() => mediaImages.value, () => {
           }"
         >
           <template #content>
-            <div class="flex items-center justify-between gap-4 lg:gap-6">
+            <div class="flex items-center justify-between gap-3 min-w-0">
               <!-- 左侧：网盘信息和评分 -->
-              <div class="flex items-center gap-4 lg:gap-6 flex-shrink-0">
+              <div class="flex items-center gap-3 flex-shrink-0 min-w-0">
                 <!-- 网盘图标和名称 -->
                 <div class="flex items-center gap-3 lg:gap-4">
                   <div class="w-12 h-12 lg:w-16 lg:h-16 rounded-2xl overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 flex items-center justify-center shadow-lg flex-shrink-0">
@@ -1501,34 +1501,15 @@ watch(() => mediaImages.value, () => {
                   </div>
                 </div>
               </div>
-              <!-- 中间：文件信息 -->
-              <div class="flex items-center gap-4 lg:gap-6">
-                <div class="text-center min-w-0 flex-shrink-0">
-                  <div class="flex items-center gap-1">
-                    <i class="pi pi-star-fill text-yellow-400 text-lg lg:text-xl"></i>
-                      <span class="text-base lg:text-lg font-bold text-gray-900 dark:text-white">{{ resource.submitterId === 'pansou' ? '暂无' : (resource.rating == null ? '暂无' : resource.rating.toFixed(1)) }}</span>
-                  </div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ resource.submitterId === 'pansou' ? '暂无资源评分' : t('rating_count_format', { count: (resource.ratingCount || 0).toString() }) }}</div>
-                </div>
-                <div class="text-center min-w-0 flex-shrink-0">
+              <!-- 中间：只显示文件大小，不展示评分、片名、分辨率和编码 -->
+              <div class="flex-1 min-w-0 flex justify-center">
+                <div class="text-center min-w-0">
                   <div class="text-lg lg:text-xl font-bold text-gray-900 dark:text-white truncate">{{ resource.fileSize || '未知' }}</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('file_size') }}<span v-if="resource.submitterId === 'pansou' && resource.fileSize">（网盘返回）</span></div>
-                </div>
-                <div class="text-center min-w-0 flex-shrink-0">
-                  <div class="text-base lg:text-lg font-semibold text-gray-900 dark:text-white truncate">{{ getResolutionByCode(resource.resolution)?.label || '未知' }}</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('resolution') }}<span v-if="resource.submitterId === 'pansou' && resource.resolution">（文件名识别）</span></div>
-                </div>
-                <div class="text-center min-w-0 flex-shrink-0">
-                  <div class="text-base lg:text-lg font-medium text-gray-900 dark:text-white truncate" :title="getVideoCodecByCode(resource.videoCodec)?.label">{{ getVideoCodecByCode(resource.videoCodec)?.label || '未知' }}</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('video_codec') }}<span v-if="resource.submitterId === 'pansou' && resource.videoCodec">（文件名识别）</span></div>
-                </div>
-                <div class="text-center min-w-0 flex-shrink-0">
-                  <div class="text-base lg:text-lg font-medium text-gray-900 dark:text-white truncate" :title="getAudioCodecByCode(resource.audioCodec)?.label">{{ getAudioCodecByCode(resource.audioCodec)?.label || '未知' }}</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('audio_codec') }}<span v-if="resource.submitterId === 'pansou' && resource.audioCodec">（文件名识别）</span></div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('file_size') }}</div>
                 </div>
               </div>
               <!-- 右侧：操作按钮 -->
-              <div class="flex items-center gap-2 lg:gap-3 flex-shrink-0">
+              <div class="flex items-center gap-2 flex-shrink-0">
                 <button
                   @click="openDriveLink(resource.driveLink)"
                   class="w-10 h-10 lg:w-12 lg:h-12 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white rounded-xl transition-all duration-300 flex items-center justify-center shadow-lg hover:shadow-xl transform hover:scale-110"
