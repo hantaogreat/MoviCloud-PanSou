@@ -5,8 +5,8 @@ set -euo pipefail
 # bash scripts/pack-fnos.sh /path/to/movicloud-pansou-release /path/to/movicloud-pansou
 #
 # Updates ONLY the local FPK project (not the installed fnOS application).
-if [[ $# -ne 2 ]]; then
-  echo "Usage: bash scripts/pack-fnos.sh <built-source-dir> <fpk-project-dir>" >&2
+if [[ $# -lt 2 || $# -gt 3 ]]; then
+  echo "Usage: bash scripts/pack-fnos.sh <built-source-dir> <fpk-project-dir> [new-version]" >&2
   exit 2
 fi
 src="$(realpath "$1")"
@@ -16,6 +16,20 @@ fpk="$(realpath "$2")"
 [[ -f "$fpk/manifest" && -f "$fpk/cmd/main" && -f "$fpk/app/ui/config" ]] || { echo "Not an fnpack app project" >&2; exit 1; }
 [[ -x "$fpk/app/bin/node" ]] || { echo "Missing executable $fpk/app/bin/node" >&2; exit 1; }
 command -v fnpack >/dev/null || { echo "fnpack not found" >&2; exit 1; }
+
+# For an in-place fnOS upgrade, keep the same appname and use a HIGHER
+# numeric manifest version. Never change or delete installed data.
+current_version="$(sed -nE 's/^[[:space:]]*version[[:space:]]*=[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+)[[:space:]]*$/\1/p' "$fpk/manifest" | head -1)"
+[[ -n "$current_version" ]] || { echo "Invalid or missing manifest version" >&2; exit 1; }
+if [[ $# -eq 3 ]]; then
+  new_version="$3"
+  [[ "$new_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Version must be numeric X.Y.Z" >&2; exit 1; }
+  [[ "$new_version" != "$current_version" && "$(printf '%s\n%s\n' "$current_version" "$new_version" | sort -V | tail -1)" == "$new_version" ]] || { echo "New version must be greater than current manifest version $current_version" >&2; exit 1; }
+  sed -i -E "s/^([[:space:]]*version[[:space:]]*=[[:space:]]*)[0-9]+\.[0-9]+\.[0-9]+([[:space:]]*)$/\1$new_version\2/" "$fpk/manifest"
+  echo "FPK manifest version: $current_version -> $new_version"
+else
+  echo "FPK manifest version: $current_version (unchanged). For an upgrade, pass a higher third argument."
+fi
 
 bash -n "$fpk/cmd/main"
 grep -q '^appname[[:space:]]*=[[:space:]]*movicloud-pansou' "$fpk/manifest" || { echo "Unexpected appname in manifest" >&2; exit 1; }
