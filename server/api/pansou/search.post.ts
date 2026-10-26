@@ -66,36 +66,52 @@ export default defineEventHandler(async (event) => {
   }
   // Only confirmed-valid share links are shown. The PanSou check API is required:
   // unsupported/locked/uncertain links are not treated as valid.
-  const validated: any[] = []
   const batchSize = 40
-  try {
-    for (let i = 0; i < resources.length; i += batchSize) {
-      const batch = resources.slice(i, i + batchSize)
-      const report: any = await $fetch(`${base}/api/check/links`, {
-        method: 'POST',
-        timeout: 30000,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(process.env.PANSOU_API_TOKEN ? { Authorization: `Bearer ${process.env.PANSOU_API_TOKEN}` } : {})
-        },
-        body: {
-          items: batch.map(item => ({
-            disk_type: item.cloudDriveCode,
-            url: item.driveLink,
-            password: item.password || ''
-          }))
+  const batches: any[][] = []
+  for (let i = 0; i < resources.length; i += batchSize) batches.push(resources.slice(i, i + batchSize))
+
+  // Independent batches run with bounded concurrency; previously each 30s
+  // batch was awaited serially. Never pass uncertain or failed checks as valid.
+  const validUrls = new Set<string>()
+  let nextBatch = 0
+  let checkFailed = false
+  const worker = async () => {
+    while (nextBatch < batches.length && !checkFailed) {
+      const batch = batches[nextBatch++]
+      try {
+        const report: any = await $fetch(`${base}/api/check/links`, {
+          method: 'POST',
+          timeout: 12000,
+          headers: {
+            'Content-Type': 'application/json',
+            ...(process.env.PANSOU_API_TOKEN ? { Authorization: `Bearer ${process.env.PANSOU_API_TOKEN}` } : {})
+          },
+          body: {
+            items: batch.map(item => ({
+              disk_type: item.cloudDriveCode,
+              url: item.driveLink,
+              password: item.password || ''
+            }))
+          }
+        })
+        const results = report?.results || report?.data?.results
+        if (!Array.isArray(results)) throw new Error('Invalid PanSou link-check response')
+        for (const item of results) {
+          if (item?.state === 'ok' && typeof item.url === 'string') {
+            validUrls.add(item.url)
+            if (typeof item.normalized_url === 'string') validUrls.add(item.normalized_url)
+          }
         }
-      })
-      const results = report?.results || report?.data?.results || []
-      if (!Array.isArray(results)) throw new Error('Invalid PanSou link-check response')
-      const validUrls = new Set(results.filter((r: any) => r?.state === 'ok').map((r: any) => r.url))
-      for (const item of batch) {
-        if (validUrls.has(item.driveLink)) validated.push(item)
+      } catch (error) {
+        checkFailed = true
+        console.error('PanSou link validity check failed:', error)
       }
     }
-  } catch (error) {
-    console.error('PanSou link validity check unavailable:', error)
-    throw createError({ statusCode: 503, statusMessage: 'PanSou link validity check unavailable; update PanSou to a version supporting /api/check/links' })
   }
+  await Promise.all(Array.from({ length: Math.min(4, batches.length) }, () => worker()))
+  if (checkFailed) {
+    throw createError({ statusCode: 503, statusMessage: 'PanSou link check timed out or failed; only confirmed-valid results can be shown' })
+  }
+  const validated = resources.filter(item => validUrls.has(item.driveLink))
   return { resources: validated }
 })
