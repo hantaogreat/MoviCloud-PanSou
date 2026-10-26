@@ -64,5 +64,38 @@ export default defineEventHandler(async (event) => {
       })
     }
   }
-  return { resources }
+  // Only confirmed-valid share links are shown. The PanSou check API is required:
+  // unsupported/locked/uncertain links are not treated as valid.
+  const validated: any[] = []
+  const batchSize = 40
+  try {
+    for (let i = 0; i < resources.length; i += batchSize) {
+      const batch = resources.slice(i, i + batchSize)
+      const report: any = await $fetch(`${base}/api/check/links`, {
+        method: 'POST',
+        timeout: 30000,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(process.env.PANSOU_API_TOKEN ? { Authorization: `Bearer ${process.env.PANSOU_API_TOKEN}` } : {})
+        },
+        body: {
+          items: batch.map(item => ({
+            disk_type: item.cloudDriveCode,
+            url: item.driveLink,
+            password: item.password || ''
+          }))
+        }
+      })
+      const results = report?.results || report?.data?.results || []
+      if (!Array.isArray(results)) throw new Error('Invalid PanSou link-check response')
+      const validUrls = new Set(results.filter((r: any) => r?.state === 'ok').map((r: any) => r.url))
+      for (const item of batch) {
+        if (validUrls.has(item.driveLink)) validated.push(item)
+      }
+    }
+  } catch (error) {
+    console.error('PanSou link validity check unavailable:', error)
+    throw createError({ statusCode: 503, statusMessage: 'PanSou link validity check unavailable; update PanSou to a version supporting /api/check/links' })
+  }
+  return { resources: validated }
 })
