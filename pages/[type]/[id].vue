@@ -413,10 +413,7 @@ const fetchDetails = async () => {
     // 检查飞牛影视中是否存在该媒体
     checkTrimeMedia()
     
-    // 延迟获取资源数据：电影不在进入页面时加载，点击后再加载
-    // if (type === 'movie') {
-    //   await fetchResources()
-    // }
+    void fetchResources()
     
   } catch (err) {
     error.value = '获取详情失败，请稍后重试'
@@ -431,88 +428,58 @@ const fetchDetails = async () => {
   }
 }
 
-// 获取资源数据
-const fetchResources = async () => {
-  try {
-    resourceLoading.value = true
+// Search begins on detail load. Selecting another season invalidates only the UI request.
+let resourceRequest = 0
+let resourceTimer: ReturnType<typeof setTimeout> | undefined
+let disposed = false
+let activeQuery = ''
+const resourceCache = new Map<string, { resources: ResourceItem[]; expires: number }>()
+onUnmounted(() => { disposed = true; resourceRequest++; clearTimeout(resourceTimer) })
+const fetchResources = async (query = title.value) => {
+  if (!query || disposed) return
+  if (activeQuery === query && resourceLoading.value) return
+  activeQuery = query
+  const cached = resourceCache.get(query)
+  if (cached && cached.expires > Date.now()) {
+    resourceRequest++
+    clearTimeout(resourceTimer)
+    resourceList.value = cached.resources
+    resourceLoading.value = false
     resourceError.value = ''
-    
-    if (type === 'movie') {
-      const resources = await getMovieResources(id.toString(), title.value)
-      resourceList.value = resources
-    } else {
-      // 电视剧传递电视剧ID，不指定具体季数
-      const resources = await getTVResources(id.toString(), id, undefined, title.value)
-      resourceList.value = resources
+    return
+  }
+  const requestId = ++resourceRequest
+  clearTimeout(resourceTimer)
+  resourceLoading.value = true
+  resourceError.value = ''
+  resourceList.value = []
+  const poll = async () => {
+    if (disposed || requestId !== resourceRequest) return
+    try {
+      const result = await $fetch<{ resources: ResourceItem[]; status: string; error?: string; expiresAt: number }>('/api/pansou/search', {
+        method: 'POST', body: { title: query, mediaId: id, type }
+      })
+      if (disposed || requestId !== resourceRequest) return
+      resourceList.value = result.resources || []
+      resourceLoading.value = ['searching', 'checking'].includes(result.status)
+      resourceError.value = result.error || ''
+      if (result.status === 'done') resourceCache.set(query, { resources: result.resources || [], expires: result.expiresAt })
+      if (resourceLoading.value) resourceTimer = setTimeout(poll, 1000)
+    } catch {
+      if (disposed || requestId !== resourceRequest) return
+      resourceLoading.value = false
+      resourceError.value = '获取资源失败，请稍后重试'
     }
-    
-  } catch (err) {
-    resourceError.value = '获取资源列表失败，请稍后重试'
-    // API失败时不使用模拟数据，保持空列表
-    resourceList.value = []
-  } finally {
-    resourceLoading.value = false
   }
+  await poll()
 }
-
-// 新增：电影点击后再请求资源
-const handleMovieDownload = async () => {
-  try {
-    resourceLoading.value = true
-    resourceError.value = ''
-    const resources = await getMovieResources(id.toString(), title.value)
-    resourceList.value = resources
-    showDownloadModal.value = true
-  } catch (err) {
-    resourceError.value = '获取资源列表失败，请稍后重试'
-    resourceList.value = []
-  } finally {
-    resourceLoading.value = false
-  }
+const openResources = (query: string) => {
+  showDownloadModal.value = true
+  void fetchResources(query)
 }
-
-// 下载特定季数的资源
-const downloadSeason = async (seasonNumber: number) => {
-  try {
-    resourceLoading.value = true
-    resourceError.value = ''
-    
-    // 获取特定季数的资源
-    const resources = await getTVResources(id.toString(), seasonNumber, undefined, `${title.value} 第${seasonNumber}季`)
-    resourceList.value = resources
-    
-    // 打开下载模态框
-    showDownloadModal.value = true
-    
-  } catch (err) {
-    resourceError.value = '获取季数资源失败，请稍后重试'
-    resourceList.value = []
-  } finally {
-    resourceLoading.value = false
-  }
-}
-
-// 下载合集（所有季数）
-const downloadAllSeasons = async () => {
-  try {
-    resourceLoading.value = true
-    resourceError.value = ''
-    
-    // 获取所有季数的资源
-    const resources = await getTVResources(id.toString(), id, undefined, title.value)
-    resourceList.value = resources
-    
-    // 打开下载模态框
-    showDownloadModal.value = true
-    
-  } catch (err) {
-    resourceError.value = '获取合集资源失败，请稍后重试'
-    resourceList.value = []
-  } finally {
-    resourceLoading.value = false
-  }
-}
-
+const handleMovieDownload = () => openResources(title.value)
+const downloadSeason = (seasonNumber: number) => openResources(`${title.value} 第${seasonNumber}季`)
+const downloadAllSeasons = () => openResources(title.value)
 
 // 页面加载时获取数据
 onMounted(() => {
@@ -1467,6 +1434,8 @@ watch(() => mediaImages.value, () => {
       <CloudDriveFilter @filter-change="handleFilterChange" />
     </div>
     
+    <p v-if="resourceLoading" class="mt-4 text-sm" role="status">正在后台搜索并验证链接，结果将自动更新…</p>
+    <p v-if="resourceError && resourceList.length" class="mt-4 text-sm" role="alert">{{ resourceError }}</p>
     <!-- 资源列表 -->
     <div v-if="filteredResourceList.length > 0" class="mt-6">
       <div class="space-y-4">
@@ -1576,7 +1545,7 @@ watch(() => mediaImages.value, () => {
         <i class="pi pi-exclamation-triangle text-4xl text-red-500 mb-4"></i>
         <p class="text-surface-600 dark:text-surface-400 mb-4">{{ resourceError }}</p>
         <button 
-          @click="fetchResources"
+          @click="fetchResources(activeQuery || title)"
           class="px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary-600 transition-colors duration-200"
         >
           {{ t('retry') }}
@@ -1872,7 +1841,7 @@ watch(() => mediaImages.value, () => {
     :share-url="currentSaveShareUrl"
     :drive-code="currentSaveShareDriveCode"
     :accounts="getValidAccountsForDrive(currentSaveShareDriveCode)"
-    @success="fetchResources"
+    @success="fetchResources(activeQuery || title)"
   />
 </template>
 

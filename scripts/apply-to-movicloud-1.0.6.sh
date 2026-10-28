@@ -39,6 +39,9 @@ cp "$root/composables/useMoviCloudAPI.ts" "$target/composables/useMoviCloudAPI.t
 cp "$root/pages/[type]/[id].vue" "$target/pages/[type]/[id].vue"
 cp "$root/server/api/pansou/search.post.ts" "$target/server/api/pansou/search.post.ts"
 
+mkdir -p "$target/components"
+cp "$root/components/PanSouFileDetailsDialog.vue" "$target/components/PanSouFileDetailsDialog.vue"
+
 echo "PanSou integration copied to: $target"
 echo "Original files backed up under: $backup"
 echo "IMPORTANT: Review the code diff, build and test. This does not install or modify running fnOS apps."

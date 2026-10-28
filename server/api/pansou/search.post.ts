@@ -25,10 +25,10 @@ const metadataFromNote = (note: string) => {
 }
 
 const driveCodes = new Set(['115', '123', 'uc', 'quark', 'xunlei'])
-export default defineEventHandler(async (event) => {
-  const body = await readBody<{ title?: string; mediaId?: number; type?: 'movie'|'tv' }>(event)
-  const title = String(body?.title || '').trim().slice(0, 120)
-  if (!title) throw createError({ statusCode: 400, statusMessage: 'Missing title' })
+type Job = { resources: any[]; status: 'searching' | 'checking' | 'done' | 'error'; expires: number; error?: string }
+const jobs = new Map<string, Job>()
+const ttl = 30 * 60 * 1000
+const run = async (body: any, title: string, job: Job) => {
   const base = (process.env.PANSOU_API_URL || 'http://127.0.0.1:8088').replace(/\/$/, '')
   // PanSou is configured by the NAS owner; never accept an arbitrary API URL from a browser.
   let response: any
@@ -64,6 +64,7 @@ export default defineEventHandler(async (event) => {
       })
     }
   }
+  job.status = 'checking'
   // Only confirmed-valid share links are shown. The PanSou check API is required:
   // unsupported/locked/uncertain links are not treated as valid.
   const batchSize = 40
@@ -102,6 +103,7 @@ export default defineEventHandler(async (event) => {
             if (typeof item.normalized_url === 'string') validUrls.add(item.normalized_url)
           }
         }
+        job.resources = resources.filter(item => validUrls.has(item.driveLink))
       } catch (error) {
         checkFailed = true
         console.error('PanSou link validity check failed:', error)
@@ -112,6 +114,31 @@ export default defineEventHandler(async (event) => {
   if (checkFailed) {
     throw createError({ statusCode: 503, statusMessage: 'PanSou link check timed out or failed; only confirmed-valid results can be shown' })
   }
-  const validated = resources.filter(item => validUrls.has(item.driveLink))
-  return { resources: validated }
+  return resources.filter(item => validUrls.has(item.driveLink))
+}
+export default defineEventHandler(async (event) => {
+  const body = await readBody<{ title?: string; mediaId?: number; type?: 'movie'|'tv' }>(event)
+  const title = String(body?.title || '').trim().slice(0, 120)
+  if (!title) throw createError({ statusCode: 400, statusMessage: 'Missing title' })
+  const key = JSON.stringify([body.type === 'tv' ? 'tv' : 'movie', Number(body.mediaId) || 0, title])
+  const now = Date.now()
+  for (const [k, j] of jobs) if (j.expires <= now) jobs.delete(k)
+  let job = jobs.get(key)
+  if (!job) {
+    if (jobs.size >= 100) throw createError({ statusCode: 503, statusMessage: 'Search cache busy' })
+    job = { resources: [], status: 'searching', expires: now + ttl }
+    jobs.set(key, job)
+    const current = job
+    // Retain the job before starting work, so concurrent prefetch/clicks share it.
+    void run(body, title, current).then(resources => {
+      current.resources = resources
+      current.status = 'done'
+      current.expires = Date.now() + ttl
+    }).catch(() => {
+      current.status = 'error'
+      current.error = '搜索或链接验证失败，请稍后重试'
+      current.expires = Date.now() + 5000
+    })
+  }
+  return { resources: job.resources, status: job.status, error: job.error, expiresAt: job.expires }
 })
