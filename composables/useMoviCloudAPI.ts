@@ -84,11 +84,14 @@ const request = async (url: string, options: RequestInit = {}): Promise<any> => 
 // PanSou 影视资源搜索。与个人网盘文件搜索及 MoviCloud 原有写入 API 分离。
 const searchPanSou = async (mediaId: string, title: string, type: 'movie' | 'tv'): Promise<ResourceItem[]> => {
   if (!title.trim()) return []
-  const data = await $fetch<{ resources: ResourceItem[] }>('/api/pansou/search', {
-    method: 'POST',
-    body: { title: title.trim(), mediaId: Number(mediaId), type }
-  })
-  return data.resources || []
+  for (;;) {
+    const data = await $fetch<{ resources: ResourceItem[]; status: string; error?: string }>('/api/pansou/search', {
+      method: 'POST', body: { title: title.trim(), mediaId: Number(mediaId), type }
+    })
+    if (data.status === 'error') throw new Error(data.error || 'PanSou search failed')
+    if (['done', 'partial'].includes(data.status)) return data.resources || []
+    await new Promise(resolve => setTimeout(resolve, 1000))
+  }
 }
 
 const getMovieResources = async (mediaId: string, title = ''): Promise<ResourceItem[]> => {
