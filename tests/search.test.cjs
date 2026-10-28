@@ -50,20 +50,20 @@ test('validation failure is explicit, never exposes unchecked links, and retries
   await app.call(body); assert.equal(calls, 2)
   app.advance(5001); await app.call(body); assert.equal(calls, 3)
 })
-test('checks batches of 40 with at most four workers and publishes completed batches', async () => {
+test('checks batches of 8 with at most two workers and publishes completed batches', async () => {
   let active = 0, peak = 0
   const gates = []
   const app = server(async (url, options) => {
     if (url.endsWith('/search')) return { merged_by_type: { quark: Array.from({ length: 201 }, (_, n) => ({ url: `https://pan.quark.cn/s/${n}` })) } }
-    assert.ok(options.body.items.length <= 40)
+    assert.ok(options.body.items.length <= 8)
     active++; peak = Math.max(peak, active)
     await new Promise(resolve => gates.push(resolve)); active--
     return { results: options.body.items.map(item => ({ ...item, state: 'ok' })) }
   })
-  await app.call(body); await flush(); assert.equal(peak, 4)
+  await app.call(body); await flush(); assert.equal(peak, 2)
   gates.shift()(); await flush()
   const partial = await app.call(body)
-  assert.equal(partial.status, 'checking'); assert.equal(partial.resources.length, 40)
+  assert.equal(partial.status, 'checking'); assert.equal(partial.resources.length, 8)
   while (gates.length) { gates.shift()(); await flush() }
   assert.equal((await app.call(body)).resources.length, 201)
 })
@@ -72,7 +72,7 @@ test('download opens before network completion, reuses prefetch and cache, ignor
   const block = page.slice(page.indexOf('let resourceRequest'), page.indexOf('// 页面加载时获取数据'))
   const pending = [], timers = []
   let unmount
-  const context = { exports: {}, Date, Map, title: { value: '测试电影' }, id: 1, type: 'tv',
+  const context = { exports: {}, Date, Map, ref: value => ({ value }), title: { value: '测试电影' }, id: 1, type: 'tv',
     resourceList: { value: [] }, resourceLoading: { value: false }, resourceError: { value: '' }, showDownloadModal: { value: false },
     onUnmounted: fn => { unmount = fn }, setTimeout: fn => { timers.push(fn); return timers.length }, clearTimeout() {},
     $fetch: () => new Promise(resolve => pending.push(resolve)) }
@@ -91,4 +91,66 @@ test('download opens before network completion, reuses prefetch and cache, ignor
   // A cleared timer is not invoked by the browser; any late network response is ignored.
   if (pending.length) { pending.shift()({ status: 'done', resources: [{ id: 9 }] }); await flush() }
   assert.equal(context.resourceList.value[0].id, 3)
+})
+
+test('allows a checker response beyond the old 12 second cutoff', async () => {
+  let release
+  const gate = new Promise(resolve => { release = resolve })
+  const app = server(async (url, options) => {
+    if (url.endsWith('/search')) return { merged_by_type: { quark: [{ url: 'https://pan.quark.cn/s/slow' }] } }
+    assert.ok(options.timeout > 15000)
+    await gate
+    return { results: [{ url: 'https://pan.quark.cn/s/slow', state: 'ok' }] }
+  })
+  await app.call(body); await flush(); app.advance(15100)
+  assert.equal((await app.call(body)).status, 'checking')
+  release(); await flush()
+  assert.equal((await app.call(body)).status, 'done')
+  assert.equal((await app.call(body)).resources.length, 1)
+})
+test('a failed batch does not cancel remaining batches or discard valid results', async () => {
+  let checks = 0
+  const app = server(async (url, options) => {
+    if (url.endsWith('/search')) return { merged_by_type: { quark: Array.from({ length: 24 }, (_, n) => ({ url: `https://pan.quark.cn/s/${n}` })) } }
+    checks++
+    if (options.body.items[0].url.endsWith('/0')) throw Error('timeout')
+    return { results: options.body.items.map(item => ({ ...item, state: 'ok' })) }
+  })
+  await app.call(body); await flush()
+  const result = await app.call(body)
+  assert.equal(checks, 3)
+  assert.equal(result.status, 'partial')
+  assert.equal(result.resources.length, 16)
+  assert.equal(result.summary.failed, 8)
+  assert.equal(result.summary.checked, 16)
+  assert.ok(result.error)
+  app.advance(5001); await app.call(body); await flush()
+  assert.equal(checks, 6)
+})
+test('the reported movie with bad and uncertain links is an empty result, not a search failure', async () => {
+  const app = server(async url => {
+    if (url.endsWith('/search')) return { merged_by_type: { quark: [0, 1, 2, 3].map(n => ({ url: `https://pan.quark.cn/s/${n}` })) } }
+    return { results: [0, 1, 2, 3].map(n => ({ url: `https://pan.quark.cn/s/${n}`, state: n < 3 ? 'bad' : 'uncertain' })) }
+  })
+  await app.call(body); await flush()
+  const result = await app.call(body)
+  assert.equal(result.status, 'done'); assert.equal(result.error, undefined)
+  assert.equal(result.resources.length, 0)
+  assert.equal(result.summary.invalid, 3); assert.equal(result.summary.uncertain, 1)
+  assert.equal(result.expiresAt, 61000)
+})
+test('multiple films share a global limit of four link checker requests', async () => {
+  let active = 0, peak = 0
+  const gates = []
+  const app = server(async (url, options) => {
+    if (url.endsWith('/search')) return { merged_by_type: { quark: Array.from({ length: 16 }, (_, n) => ({ url: `https://pan.quark.cn/s/${n}` })) } }
+    active++; peak = Math.max(peak, active)
+    await new Promise(resolve => gates.push(resolve)); active--
+    return { results: options.body.items.map(item => ({ ...item, state: 'ok' })) }
+  })
+  await Promise.all([1, 2, 3].map(mediaId => app.call({ ...body, mediaId })))
+  await flush(); assert.equal(peak, 4)
+  while (gates.length) { gates.shift()(); await flush() }
+  for (const mediaId of [1, 2, 3]) assert.equal((await app.call({ ...body, mediaId })).status, 'done')
+  assert.equal(peak, 4)
 })

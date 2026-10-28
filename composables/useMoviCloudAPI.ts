@@ -89,7 +89,7 @@ const searchPanSou = async (mediaId: string, title: string, type: 'movie' | 'tv'
       method: 'POST', body: { title: title.trim(), mediaId: Number(mediaId), type }
     })
     if (data.status === 'error') throw new Error(data.error || 'PanSou search failed')
-    if (data.status === 'done') return data.resources || []
+    if (['done', 'partial'].includes(data.status)) return data.resources || []
     await new Promise(resolve => setTimeout(resolve, 1000))
   }
 }

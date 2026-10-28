@@ -433,7 +433,8 @@ let resourceRequest = 0
 let resourceTimer: ReturnType<typeof setTimeout> | undefined
 let disposed = false
 let activeQuery = ''
-const resourceCache = new Map<string, { resources: ResourceItem[]; expires: number }>()
+const resourceSummary = ref<{ total: number; checked: number; invalid: number; uncertain: number; failed: number } | null>(null)
+const resourceCache = new Map<string, { resources: ResourceItem[]; expires: number; summary: typeof resourceSummary.value }>()
 onUnmounted(() => { disposed = true; resourceRequest++; clearTimeout(resourceTimer) })
 const fetchResources = async (query = title.value) => {
   if (!query || disposed) return
@@ -443,6 +444,7 @@ const fetchResources = async (query = title.value) => {
   if (cached && cached.expires > Date.now()) {
     resourceRequest++
     clearTimeout(resourceTimer)
+    resourceSummary.value = cached.summary
     resourceList.value = cached.resources
     resourceLoading.value = false
     resourceError.value = ''
@@ -453,17 +455,19 @@ const fetchResources = async (query = title.value) => {
   resourceLoading.value = true
   resourceError.value = ''
   resourceList.value = []
+  resourceSummary.value = null
   const poll = async () => {
     if (disposed || requestId !== resourceRequest) return
     try {
-      const result = await $fetch<{ resources: ResourceItem[]; status: string; error?: string; expiresAt: number }>('/api/pansou/search', {
+      const result = await $fetch<{ resources: ResourceItem[]; status: string; error?: string; expiresAt: number; summary?: typeof resourceSummary.value }>('/api/pansou/search', {
         method: 'POST', body: { title: query, mediaId: id, type }
       })
       if (disposed || requestId !== resourceRequest) return
+      resourceSummary.value = result.summary || null
       resourceList.value = result.resources || []
       resourceLoading.value = ['searching', 'checking'].includes(result.status)
       resourceError.value = result.error || ''
-      if (result.status === 'done') resourceCache.set(query, { resources: result.resources || [], expires: result.expiresAt })
+      if (result.status === 'done') resourceCache.set(query, { resources: result.resources || [], expires: result.expiresAt, summary: resourceSummary.value })
       if (resourceLoading.value) resourceTimer = setTimeout(poll, 1000)
     } catch {
       if (disposed || requestId !== resourceRequest) return
@@ -1435,7 +1439,11 @@ watch(() => mediaImages.value, () => {
     </div>
     
     <p v-if="resourceLoading" class="mt-4 text-sm" role="status">正在后台搜索并验证链接，结果将自动更新…</p>
-    <p v-if="resourceError && resourceList.length" class="mt-4 text-sm" role="alert">{{ resourceError }}</p>
+    <div v-if="resourceError && resourceList.length" class="mt-4 text-sm" role="alert">
+      {{ resourceError }}
+      <button type="button" class="ml-2 underline" @click="fetchResources(activeQuery || title)">重新验证</button>
+    </div>
+    <p v-if="resourceSummary" class="mt-3 text-sm" role="status">候选 {{ resourceSummary.total }} 条，已检测 {{ resourceSummary.checked }} 条，失效 {{ resourceSummary.invalid }} 条，暂无法确认 {{ resourceSummary.uncertain }} 条<span v-if="resourceSummary.failed">，检测失败 {{ resourceSummary.failed }} 条</span>。</p>
     <!-- 资源列表 -->
     <div v-if="filteredResourceList.length > 0" class="mt-6">
       <div class="space-y-4">
@@ -1558,7 +1566,8 @@ watch(() => mediaImages.value, () => {
       <div class="text-center">
         <i class="pi pi-inbox text-4xl text-gray-400 mb-4"></i>
         <p class="text-surface-600 dark:text-surface-400 mb-2">{{ t('no_resources_available') }}</p>
-        <p class="text-surface-500 dark:text-surface-500 text-sm">{{ t('be_first_to_submit') }}</p>
+        <p v-if="resourceSummary?.total" class="text-surface-500 dark:text-surface-500 text-sm">检测已完成，当前没有确认有效的链接。暂无法确认的链接不会当作有效资源。</p>
+        <p v-else class="text-surface-500 dark:text-surface-500 text-sm">暂未搜索到支持的网盘资源。</p>
       </div>
     </div>
     

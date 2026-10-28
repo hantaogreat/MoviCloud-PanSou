@@ -25,9 +25,21 @@ const metadataFromNote = (note: string) => {
 }
 
 const driveCodes = new Set(['115', '123', 'uc', 'quark', 'xunlei'])
-type Job = { resources: any[]; status: 'searching' | 'checking' | 'done' | 'error'; expires: number; error?: string }
+type Job = { resources: any[]; status: 'searching' | 'checking' | 'done' | 'partial' | 'error'; expires: number; error?: string; summary?: { total: number; checked: number; invalid: number; uncertain: number; failed: number } }
 const jobs = new Map<string, Job>()
 const ttl = 30 * 60 * 1000
+// Bound checker traffic across all films, rather than four new workers per page.
+let activeChecks = 0
+const checkQueue: Array<() => void> = []
+const withCheckSlot = async <T>(task: () => Promise<T>): Promise<T> => {
+  if (activeChecks >= 4) await new Promise<void>(resolve => checkQueue.push(resolve))
+  else activeChecks++
+  try { return await task() } finally {
+    const next = checkQueue.shift()
+    if (next) next()
+    else activeChecks--
+  }
+}
 const run = async (body: any, title: string, job: Job) => {
   const base = (process.env.PANSOU_API_URL || 'http://127.0.0.1:8088').replace(/\/$/, '')
   // PanSou is configured by the NAS owner; never accept an arbitrary API URL from a browser.
@@ -65,54 +77,67 @@ const run = async (body: any, title: string, job: Job) => {
     }
   }
   job.status = 'checking'
+  job.summary = { total: resources.length, checked: 0, invalid: 0, uncertain: 0, failed: 0 }
   // Only confirmed-valid share links are shown. The PanSou check API is required:
   // unsupported/locked/uncertain links are not treated as valid.
-  const batchSize = 40
+  const batchSize = 8
   const batches: any[][] = []
   for (let i = 0; i < resources.length; i += batchSize) batches.push(resources.slice(i, i + batchSize))
 
-  // Independent batches run with bounded concurrency; previously each 30s
-  // batch was awaited serially. Never pass uncertain or failed checks as valid.
+  // Slow links can legitimately take 15 seconds. Do not let one failed batch
+  // cancel unrelated results, and do not turn unchecked links into valid ones.
   const validUrls = new Set<string>()
   let nextBatch = 0
-  let checkFailed = false
+  const deadline = Date.now() + 120000
   const worker = async () => {
-    while (nextBatch < batches.length && !checkFailed) {
+    while (nextBatch < batches.length) {
       const batch = batches[nextBatch++]
       try {
-        const report: any = await $fetch(`${base}/api/check/links`, {
-          method: 'POST',
-          timeout: 12000,
-          headers: {
-            'Content-Type': 'application/json',
-            ...(process.env.PANSOU_API_TOKEN ? { Authorization: `Bearer ${process.env.PANSOU_API_TOKEN}` } : {})
-          },
-          body: {
-            items: batch.map(item => ({
-              disk_type: item.cloudDriveCode,
-              url: item.driveLink,
-              password: item.password || ''
-            }))
-          }
+        const report: any = await withCheckSlot(async () => {
+          if (Date.now() >= deadline) throw new Error('Link check budget exceeded')
+          return await $fetch(`${base}/api/check/links`, {
+            method: 'POST',
+            timeout: Math.min(45000, deadline - Date.now()),
+            retry: 0,
+            headers: {
+              'Content-Type': 'application/json',
+              ...(process.env.PANSOU_API_TOKEN ? { Authorization: `Bearer ${process.env.PANSOU_API_TOKEN}` } : {})
+            },
+            body: {
+              items: batch.map(item => ({
+                disk_type: item.cloudDriveCode,
+                url: item.driveLink,
+                password: item.password || ''
+              }))
+            }
+          })
         })
         const results = report?.results || report?.data?.results
         if (!Array.isArray(results)) throw new Error('Invalid PanSou link-check response')
+        const reported = new Set<string>()
         for (const item of results) {
-          if (item?.state === 'ok' && typeof item.url === 'string') {
-            validUrls.add(item.url)
-            if (typeof item.normalized_url === 'string') validUrls.add(item.normalized_url)
-          }
+          const original = batch.find(resource => resource.driveLink === item?.url)
+          if (!original || reported.has(original.driveLink)) continue
+          reported.add(original.driveLink)
+          if (item.state === 'ok') validUrls.add(original.driveLink)
+          else if (item.state === 'bad') job.summary!.invalid++
+          else job.summary!.uncertain++
         }
+        job.summary!.checked += reported.size
+        job.summary!.uncertain += batch.length - reported.size
         job.resources = resources.filter(item => validUrls.has(item.driveLink))
       } catch (error) {
-        checkFailed = true
-        console.error('PanSou link validity check failed:', error)
+        job.summary!.failed += batch.length
+        const cause: any = error
+        console.error('PanSou link batch failed:', { count: batch.length, status: cause?.statusCode || 0, cause: cause?.cause?.name || cause?.name || 'Error' })
       }
     }
   }
-  await Promise.all(Array.from({ length: Math.min(4, batches.length) }, () => worker()))
-  if (checkFailed) {
-    throw createError({ statusCode: 503, statusMessage: 'PanSou link check timed out or failed; only confirmed-valid results can be shown' })
+  await Promise.all(Array.from({ length: Math.min(2, batches.length) }, () => worker()))
+  if (job.summary.failed) {
+    job.error = validUrls.size
+      ? '部分链接验证超时或失败，已显示确认有效的结果；可稍后重试'
+      : '资源搜索已完成，但链接验证超时或失败，尚未确认有效资源，请稍后重试'
   }
   return resources.filter(item => validUrls.has(item.driveLink))
 }
@@ -132,13 +157,13 @@ export default defineEventHandler(async (event) => {
     // Retain the job before starting work, so concurrent prefetch/clicks share it.
     void run(body, title, current).then(resources => {
       current.resources = resources
-      current.status = 'done'
-      current.expires = Date.now() + ttl
+      current.status = current.summary?.failed ? (resources.length ? 'partial' : 'error') : 'done'
+      current.expires = Date.now() + (current.summary?.failed ? 5000 : current.summary?.uncertain ? 60000 : ttl)
     }).catch(() => {
       current.status = 'error'
-      current.error = '搜索或链接验证失败，请稍后重试'
+      current.error = '资源搜索服务请求失败或超时，请稍后重试'
       current.expires = Date.now() + 5000
     })
   }
-  return { resources: job.resources, status: job.status, error: job.error, expiresAt: job.expires }
+  return { resources: job.resources, status: job.status, error: job.error, expiresAt: job.expires, summary: job.summary }
 })
